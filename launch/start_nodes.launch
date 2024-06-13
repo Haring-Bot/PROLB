@@ -1,0 +1,7 @@
+<launch>
+        <!-- Start my_class_node Node with given rosparam -->
+        <node pkg="bootcamp" name="my_class_node" type="my_class_node" output="screen">
+          <rosparam command="load" file="$(find bootcamp)/param/params.yaml"/>
+          <remap from="this_odom" to="other_odom" />        
+        </node>
+</launch>
