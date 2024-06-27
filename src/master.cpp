@@ -7,10 +7,10 @@
 class controlRobot {
 public:
     controlRobot(ros::NodeHandle& nh) : nh_(nh) {
-        // Additional initialization for controlRobot if needed
+        robotController = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1000);
     }
 
-    void controller(float cmdVel, float cmdAng) {
+    void control(float cmdVel, float cmdAng) {
         geometry_msgs::Twist moveCmd;
         moveCmd.linear.x = cmdVel;
         moveCmd.angular.z = cmdAng;
@@ -65,12 +65,14 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh;
 
     testMsgs myTest(nh);
+    controlRobot controller(nh);
 
     while(ros::ok()){
         myTest.publisher("test");
+        controller.control(1.0, 0);
         std_msgs::String received = myTest.subscriber(10);
         ROS_INFO("Received message: %s", received.data.c_str());
-        ros::spinOnce();  // Enter ROS event loop  
+        ros::spinOnce();
     }
 
 
