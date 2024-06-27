@@ -1,0 +1,8 @@
+prefix=/home/fhtw_user/catkin_ws/src/PROLB/build/devel
+
+Name: bootcamp
+Description: Description of bootcamp
+Version: 1.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

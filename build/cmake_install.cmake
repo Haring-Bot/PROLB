@@ -128,6 +128,21 @@ if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_
 file(INSTALL DESTINATION "/usr/local" TYPE FILE FILES "/home/fhtw_user/catkin_ws/src/PROLB/build/catkin_generated/installspace/.rosinstall")
 endif()
 
+if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/home/fhtw_user/catkin_ws/src/PROLB/build/catkin_generated/installspace/bootcamp.pc")
+endif()
+
+if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/bootcamp/cmake" TYPE FILE FILES
+    "/home/fhtw_user/catkin_ws/src/PROLB/build/catkin_generated/installspace/bootcampConfig.cmake"
+    "/home/fhtw_user/catkin_ws/src/PROLB/build/catkin_generated/installspace/bootcampConfig-version.cmake"
+    )
+endif()
+
+if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/bootcamp" TYPE FILE FILES "/home/fhtw_user/catkin_ws/src/PROLB/package.xml")
+endif()
+
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/home/fhtw_user/catkin_ws/src/PROLB/build/gtest/cmake_install.cmake")
