@@ -3,9 +3,10 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "geometry_msgs/Twist.h"
+#include <sensor_msgs/LaserScan.h>
 
 class controlRobot {
-public:
+    public:
     controlRobot(ros::NodeHandle& nh) : nh_(nh) {
         robotController = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1000);
     }
@@ -19,13 +20,35 @@ public:
         robotController.publish(moveCmd);
     }
 
-private:
+    private:
     ros::NodeHandle nh_;
     ros::Publisher robotController;  // Define your publisher here
 };
 
+class receiveData{
+    public:
+    receiveData(ros::NodeHandle& nh) : nh_(nh){
+        laserSub = nh_.subscribe("/scan", 10, &receiveData::callbackLaser, this);
+    }
+    ~receiveData(){}
+
+    sensor_msgs::LaserScan receiveLaser(ros::Rate freq){
+        ros::spinOnce;
+        freq.sleep();
+        return msg;
+    }
+
+    void callbackLaser(const sensor_msgs::LaserScan::ConstPtr& msg){
+        ROS_INFO("I received: [%s]", msg->data.c_str());
+    }
+
+    private:
+    ros::NodeHandle nh_;
+    ros::Subscriber laserSub;
+};
+
 class testMsgs {
-public:
+    public:
     testMsgs(ros::NodeHandle& nh) : nh_(nh) {
         testPub = nh_.advertise<std_msgs::String>("testSubject", 1000);
         testSub = nh_.subscribe("testSubject", 1000, &testMsgs::callbackRcv, this);
@@ -51,7 +74,7 @@ public:
         return receivedMsg;  // Return the received message
     }
 
-private:
+    private:
     ros::NodeHandle nh_;
     ros::Publisher testPub;
     ros::Subscriber testSub;
@@ -59,19 +82,26 @@ private:
     int i = 0;
 };
 
+class EKFL{
+    public:
+    EKFL(){};
+    ~EKFL(){};
+
+}
+
 int main(int argc, char** argv) {
     std::cout << "starting up\n";
-    ros::init(argc, argv, "my_node");  // Initialize ROS
+    ros::init(argc, argv, "CPU");  // Initialize ROS
     ros::NodeHandle nh;
 
-    testMsgs myTest(nh);
+    //testMsgs myTest(nh);
     controlRobot controller(nh);
 
     while(ros::ok()){
-        myTest.publisher("test");
-        controller.control(1.0, 0);
-        std_msgs::String received = myTest.subscriber(10);
-        ROS_INFO("Received message: %s", received.data.c_str());
+        //myTest.publisher("test");
+        controller.control(0.2, 0);
+        //std_msgs::String received = myTest.subscriber(10);
+        //ROS_INFO("Received message: %s", received.data.c_str());
         ros::spinOnce();
     }
 
