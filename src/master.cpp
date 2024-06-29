@@ -5,6 +5,8 @@
 #include "geometry_msgs/Twist.h"
 #include "sensor_msgs/LaserScan.h"
 #include "nav_msgs/Odometry.h"
+#include "nav_msgs/OccupancyGrid.h"
+#include <rosgraph_msgs/Clock.h>
 
 class controlRobot {
     public:
@@ -32,6 +34,7 @@ class receiveData{
     receiveData(ros::NodeHandle& nh) : nh_(nh){
         laserSub = nh_.subscribe("/scan", 10, &receiveData::callbackLaser, this);
         odomSub = nh_.subscribe("/odom", 10, &receiveData::callbackOdom, this);
+        mapSub = nh_.subscribe("/map", 10, &receiveData::callbackMap, this);
     }
     ~receiveData(){}
 
@@ -41,16 +44,20 @@ class receiveData{
 
     nav_msgs::Odometry receiveOdom(){
         return latestOdom;
-
     }
 
+    nav_msgs::OccupancyGrid receiveMap(){
+        return latestMap;
+    }
 
     private:
     ros::NodeHandle nh_;
     ros::Subscriber laserSub;
     ros::Subscriber odomSub;
+    ros::Subscriber mapSub;
     sensor_msgs::LaserScan latestLaser;
     nav_msgs::Odometry latestOdom;
+    nav_msgs::OccupancyGrid latestMap;
     
     void callbackLaser(const sensor_msgs::LaserScan::ConstPtr& msg){
         latestLaser = *msg;
@@ -59,6 +66,10 @@ class receiveData{
     void callbackOdom(const nav_msgs::Odometry::ConstPtr& msg){
         latestOdom = *msg;
     }
+
+    void callbackMap(const nav_msgs::OccupancyGrid::ConstPtr& msg){
+        latestMap = *msg;
+    }
 };
 
 class testMsgs {
@@ -66,6 +77,7 @@ class testMsgs {
     testMsgs(ros::NodeHandle& nh) : nh_(nh) {
         testPub = nh_.advertise<std_msgs::String>("testSubject", 1000);
         testSub = nh_.subscribe("testSubject", 1000, &testMsgs::callbackRcv, this);
+        clockPub = nh_.advertise<rosgraph_msgs::Clock>("/clock", 1);
     }
 
     void callbackRcv(const std_msgs::String::ConstPtr& msg) {
@@ -82,6 +94,11 @@ class testMsgs {
         i++;
     }
 
+    void pubClock(){
+        curTime.clock = ros::Time::now();
+        clockPub.publish(curTime);
+    }
+
     std_msgs::String subscriber() {
         return receivedMsg;  // Return the received message
     }
@@ -89,8 +106,11 @@ class testMsgs {
     private:
     ros::NodeHandle nh_;
     ros::Publisher testPub;
+    ros::Publisher clockPub;
     ros::Subscriber testSub;
     std_msgs::String receivedMsg;  // Store received message
+    rosgraph_msgs::Clock curTime;
+
     int i = 0;
 };
 
@@ -111,6 +131,7 @@ int main(int argc, char** argv) {
     //testMsgs myTest(nh);
     controlRobot controller(nh);
     receiveData receiver(nh);
+    testMsgs misc(nh);
 
     while(ros::ok()){
         ros::spinOnce();
@@ -128,6 +149,7 @@ int main(int argc, char** argv) {
 
         nav_msgs::Odometry latestOdom = receiver.receiveOdom();     //velocity
         ROS_INFO("Received odom x: [%f]", latestOdom.twist.twist.linear.x);
+        misc.pubClock();
         loopRate.sleep();
     }
     return 0;

@@ -13,8 +13,9 @@
   </include>
 
   <!-- Start my_class_node Node with given rosparam -->
-  <node pkg="prolb_haring" name="my_class_node" type="my_class_node" output="screen">
+  <node pkg="prolb_haring" name="EKFL" type="my_class_node" output="screen">
     <rosparam command="load" file="$(find prolb_haring)/param/params.yaml"/>
     <remap from="this_odom" to="other_odom"/>        
   </node>
+  <node name = "map_server" pkg="map_server" type="map_server" args="$(find prolb_haring)/map/house.yaml"/>
 </launch>
