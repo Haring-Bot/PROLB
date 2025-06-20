@@ -34,9 +34,15 @@ def generate_launch_description():
     gazebo_pkg = FindPackageShare('turtlebot3_gazebo').find('turtlebot3_gazebo')
     gazebo_launch = os.path.join(gazebo_pkg, 'launch', 'turtlebot3_world.launch.py')
 
-    # Nav2 Launch
+    # Nav2 Launch with custom params
     nav2_pkg = FindPackageShare('turtlebot3_navigation2').find('turtlebot3_navigation2')
     nav2_launch = os.path.join(nav2_pkg, 'launch', 'navigation2.launch.py')
+    
+    # Path to your custom nav2 params
+    params_file = os.path.join(
+        FindPackageShare('PROLB_Haring').find('PROLB_Haring'),
+        'config', 'nav2_params.yaml'
+    )
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(gazebo_launch),
@@ -47,7 +53,8 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(nav2_launch),
         launch_arguments={
             'map': map_file,
-            'use_sim_time': use_sim_time
+            'use_sim_time': use_sim_time,
+            'params_file': params_file  # Add this line to use your custom params
         }.items()
     )
 

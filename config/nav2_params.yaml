@@ -1,0 +1,5 @@
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      plugins: ["obstacle_layer", "inflation_layer"]
+      # Remove voxel_layer from the list
