@@ -1,0 +1,8 @@
+source;share/PROLB_Haring/hook/cmake_prefix_path.ps1
+source;share/PROLB_Haring/hook/cmake_prefix_path.dsv
+source;share/PROLB_Haring/hook/cmake_prefix_path.sh
+source;share/PROLB_Haring/local_setup.bash
+source;share/PROLB_Haring/local_setup.dsv
+source;share/PROLB_Haring/local_setup.ps1
+source;share/PROLB_Haring/local_setup.sh
+source;share/PROLB_Haring/local_setup.zsh

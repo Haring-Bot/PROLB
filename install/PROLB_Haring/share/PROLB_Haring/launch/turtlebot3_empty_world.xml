@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<launch>
+  <!-- Arguments -->
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" description="model type [burger, waffle, waffle_pi]"/>
+  <arg name="x_pos" default="0.0"/>
+  <arg name="y_pos" default="0.0"/>
+  <arg name="z_pos" default="0.0"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="debug" default="false"/>
+
+  <!-- Launch Gazebo with empty world -->
+  <include file="$(find-pkg-share gazebo_ros)/launch/gazebo.launch.py">
+    <arg name="world" value="$(find-pkg-share gazebo_ros)/worlds/empty.world"/>
+    <arg name="debug" value="$(var debug)" />
+    <arg name="gui" value="$(var gui)" />
+    <arg name="pause" value="false"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    <arg name="headless" value="$(var headless)"/>
+  </include>
+
+  <!-- Load TurtleBot3 URDF -->
+  <let name="urdf_file" value="$(find-pkg-share turtlebot3_description)/urdf/turtlebot3_$(var model).urdf.xacro" />
+  <let name="robot_description" value="$(command 'xacro $(var urdf_file)')" />
+
+  <!-- Spawn TurtleBot in Gazebo -->
+  <node pkg="gazebo_ros" exec="spawn_entity.py" name="spawn_entity" output="screen"
+        args="-topic robot_description -entity turtlebot3_$(var model) 
+              -x $(var x_pos) -y $(var y_pos) -z $(var z_pos)" />
+
+  <!-- Publish TF -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" output="screen">
+    <param name="robot_description" value="$(var robot_description)" />
+  </node>
+  
+  <!-- Joint state publisher -->
+  <node pkg="joint_state_publisher" exec="joint_state_publisher" name="joint_state_publisher" output="screen">
+    <param name="source_list" value="['/joint_states']" />
+  </node>
+
+  <!-- RVIZ for Visualization (Optional, comment out if not needed) -->
+  <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen"
+        args="-d $(find-pkg-share turtlebot3_gazebo)/rviz/turtlebot3_gazebo.rviz" />
+
+  <!-- Reminder: Set the TURTLEBOT3_MODEL environment variable before launching -->
+  <!-- Example: export TURTLEBOT3_MODEL=burger -->
+</launch>

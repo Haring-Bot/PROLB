@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -7,28 +7,8 @@ from launch_ros.substitutions import FindPackageShare
 import os
 
 def generate_launch_description():
-    # Declare launch arguments
-    declare_use_sim_time = DeclareLaunchArgument(
-        'use_sim_time',
-        default_value='true',
-        description='Use simulation (Gazebo) clock if true'
-    )
-    
-    # Create LaunchConfiguration objects for the arguments
-    use_sim_time = LaunchConfiguration('use_sim_time')
-    
-    # Set the map file path here:
-    default_map = os.path.join(
-        FindPackageShare('PROLB_Haring').find('PROLB_Haring'),
-        'map', 'map.yaml'
-    )
-    
-    declare_map_file = DeclareLaunchArgument(
-        'map',
-        default_value=default_map,
-        description='Full path to map yaml file to load'
-    )
-    map_file = LaunchConfiguration('map')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    map_file = LaunchConfiguration('map', default=os.path.expanduser('~/map.yaml'))
 
     # Gazebo Launch
     gazebo_pkg = FindPackageShare('turtlebot3_gazebo').find('turtlebot3_gazebo')
@@ -51,9 +31,4 @@ def generate_launch_description():
         }.items()
     )
 
-    return LaunchDescription([
-        declare_use_sim_time,
-        declare_map_file,
-        gazebo,
-        nav2
-    ])
+    return LaunchDescription([gazebo, nav2])

@@ -1,0 +1,2 @@
+Invoking command in '/home/julian/Documents/FH/ros2_ws/src/PROLB/build/PROLB_Haring': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/julian/Documents/FH/ros2_ws/src/PROLB -DCMAKE_INSTALL_PREFIX=/home/julian/Documents/FH/ros2_ws/src/PROLB/install/PROLB_Haring
+Invoked command in '/home/julian/Documents/FH/ros2_ws/src/PROLB/build/PROLB_Haring' returned '1': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/julian/Documents/FH/ros2_ws/src/PROLB -DCMAKE_INSTALL_PREFIX=/home/julian/Documents/FH/ros2_ws/src/PROLB/install/PROLB_Haring

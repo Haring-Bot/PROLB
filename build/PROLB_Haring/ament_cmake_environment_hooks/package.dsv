@@ -1,0 +1,4 @@
+source;share/PROLB_Haring/local_setup.bash
+source;share/PROLB_Haring/local_setup.dsv
+source;share/PROLB_Haring/local_setup.sh
+source;share/PROLB_Haring/local_setup.zsh
