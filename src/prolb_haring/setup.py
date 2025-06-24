@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'turtlebot3_full_bringup'
+package_name = 'prolb_haring'
 
 setup(
     name=package_name,
@@ -8,7 +8,7 @@ setup(
     packages=[package_name],
     data_files=[
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', ['launch/full_bringup.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/start.launch.py']),
         ('share/' + package_name + '/map', ['map/map.yaml', 'map/map.pgm'])
     ],
     install_requires=['setuptools'],
