@@ -77,6 +77,14 @@ def generate_launch_description():
         }.items()
     )
 
+    kf_node = Node(
+        package="prolb_haring",
+        executable="testnode",
+        name="kalman_filter",
+        output="screen",
+        parameters=[{"use_sim_time": use_sim_time}]
+    )
+
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_autostart_cmd,
@@ -84,5 +92,6 @@ def generate_launch_description():
         # Add the static transform publishers before nav2
         map_to_odom_static_transform,
         initial_pose_pub,
-        nav2
+        nav2,
+        kf_node
     ])
