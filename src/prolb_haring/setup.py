@@ -14,7 +14,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='your-name',
-    maintainer_email='your@email.com',
+    maintainer_email='re23m009@technikum-wien.at',
     description='Full bringup for TurtleBot3 with Gazebo, Nav2 and RViz2',
     license='MIT',
     tests_require=['pytest'],

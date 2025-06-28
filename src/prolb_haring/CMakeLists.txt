@@ -15,10 +15,22 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+# Set C++ standard to C++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Add executable
 add_executable(testnode src/testnode.cpp)
-ament_target_dependencies(testnode rclcpp std_msgs nav_msgs)
+ament_target_dependencies(testnode 
+  rclcpp
+  std_msgs
+  nav_msgs
+  sensor_msgs
+  geometry_msgs
+)
 
 # Install executables
 install(TARGETS
