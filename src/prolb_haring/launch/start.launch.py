@@ -50,7 +50,7 @@ def generate_launch_description():
         package="tf2_ros",
         executable="static_transform_publisher",
         name="map_to_odom_broadcaster",
-        output="screen",
+        output="log",
         arguments=["0", "0", "0", "0", "0", "0", "map", "odom"]
     )
     
@@ -59,7 +59,7 @@ def generate_launch_description():
         package="tf2_ros",
         executable="static_transform_publisher",
         name="initial_pose_pub",
-        output="screen",
+        output="log",
         arguments=["0", "0", "0", "0", "0", "0", "map", "base_footprint"]
     )
 
