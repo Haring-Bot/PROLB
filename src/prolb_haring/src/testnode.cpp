@@ -82,19 +82,9 @@ class KF:public rclcpp::Node{
         RCLCPP_INFO(this->get_logger(), waiting_msg.c_str());
         return;
       }
-      Eigen::Matrix<double, 2, 1> u;
-      u(0) = latestCmd_vel->twist.linear.x;
-      u(1) = latestCmd_vel->twist.angular.z;
 
-      Eigen::Matrix<double, 6, 1> z;
-      z(0) = latestOdom->pose.pose.position.x;
-      z(1) = latestOdom->pose.pose.position.y;
-      z(2) = quaternionToYaw(latestOdom->pose.pose.orientation);
-      z(3) = latestOdom->twist.twist.linear.x;
-      z(4) = latestOdom->twist.twist.linear.y;
-      z(5) = latestOdom->twist.twist.angular.z;
 
-      calculateKalman(u, z);
+      calculateKalman();
 
       geometry_msgs::msg::PoseStamped pose_msg;
       pose_msg.header.stamp = this->now();
@@ -129,14 +119,36 @@ class KF:public rclcpp::Node{
     Eigen::Matrix<double, 6, 1> mu;
     Eigen::Matrix<double, 6, 6> sigma;
 
-    void calculateKalman(const Eigen::Matrix<double, 2, 1> &u, const Eigen::Matrix<double, 6, 1> &z)
+    void calculateKalman()
     {
+      Eigen::Matrix<double, 2, 1> u;
+      Eigen::Matrix<double, 6, 1> z;
+
       double x = this->mu(0);
       double y = this->mu(1);
       double theta = this->mu(2);
       double x_vel = this->mu(3);
       double y_vel = this->mu(4);
-      double theta_vel = this->mu(5);
+      double omega = this->mu(5);
+
+      u(0) = latestCmd_vel->twist.linear.x;
+      u(1) = latestCmd_vel->twist.angular.z;
+
+      tf2::Quaternion qImu(
+        latestImu->orientation.x,
+        latestImu->orientation.y,
+        latestImu->orientation.z,
+        latestImu->orientation.w
+      );
+      double roll, pitch, thetaImu;
+      tf2::Matrix3x3(qImu).getRPY(roll, pitch, thetaImu);
+
+      z(0) = x + (latestOdom->twist.twist.linear.x * cos(thetaImu) * interval);
+      z(1) = y + (latestOdom->twist.twist.linear.x * sin(thetaImu) * interval);
+      z(2) = thetaImu;
+      z(3) = latestImu->linear_acceleration.x * cos(thetaImu) * interval;
+      z(4) = latestImu->linear_acceleration.x * sin(thetaImu) * interval;
+      z(5) = latestImu->angular_velocity.z;
 
       Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Identity();
       A(0,3) = interval;
@@ -145,11 +157,6 @@ class KF:public rclcpp::Node{
 
       Eigen::Matrix<double, 6, 2> B;
       B.setZero();
-
-      B(0, 0) = interval * cos(theta);
-      B(1, 0) = interval * sin(theta);
-      B(2, 1) = interval;
-
       B(3, 0) = cos(theta);
       B(4, 0) = sin(theta);
       B(5, 1) = 1;
