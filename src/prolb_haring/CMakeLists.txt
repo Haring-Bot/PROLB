@@ -17,6 +17,9 @@ find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 # Set C++ standard to C++17
 set(CMAKE_CXX_STANDARD 17)
@@ -30,7 +33,11 @@ ament_target_dependencies(testnode
   nav_msgs
   sensor_msgs
   geometry_msgs
+  tf2
+  tf2_geometry_msgs
 )
+
+target_link_libraries(testnode Eigen3::Eigen)
 
 # Install executables
 install(TARGETS

@@ -7,6 +7,7 @@
 #include "std_msgs/msg/float64.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
@@ -37,13 +38,16 @@ class KF:public rclcpp::Node{
 
       timer_ = this->create_wall_timer(
         std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
-        std::bind(&KF::timerCallback, this)
-      );
+        std::bind(&KF::timerCallback, this));
+
+      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/kf_pose", 10);
     }
   private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -70,7 +74,12 @@ class KF:public rclcpp::Node{
     {
       if (!latestOdom || !latestCmd_vel || !latestImu)
       {
-        RCLCPP_INFO(this->get_logger(), "Waiting for all data...");
+        std::string waiting_msg = "Waiting for data from:";
+        if (!latestOdom) waiting_msg += " odometry";
+        if (!latestCmd_vel) waiting_msg += " cmd_vel";
+        if (!latestImu) waiting_msg += " imu";
+        
+        RCLCPP_INFO(this->get_logger(), waiting_msg.c_str());
         return;
       }
       Eigen::Matrix<double, 2, 1> u;
@@ -85,7 +94,28 @@ class KF:public rclcpp::Node{
       z(4) = latestOdom->twist.twist.linear.y;
       z(5) = latestOdom->twist.twist.angular.z;
 
-      calculateKalman(mu, sigma, u, z);
+      calculateKalman(u, z);
+
+      geometry_msgs::msg::PoseStamped pose_msg;
+      pose_msg.header.stamp = this->now();
+      pose_msg.header.frame_id = "map";  // or "odom", depending on your TF setup
+
+      pose_msg.pose.position.x = mu(0);
+      pose_msg.pose.position.y = mu(1);
+      pose_msg.pose.position.z = 0.0;
+
+      tf2::Quaternion q;
+      q.setRPY(0, 0, mu(2));
+      pose_msg.pose.orientation.x = q.x();
+      pose_msg.pose.orientation.y = q.y();
+      pose_msg.pose.orientation.z = q.z();
+      pose_msg.pose.orientation.w = q.w();
+
+      pose_pub_->publish(pose_msg);
+      
+      RCLCPP_INFO(this->get_logger(), "Publishing pose at time: %u.%u",
+      pose_msg.header.stamp.sec,
+      pose_msg.header.stamp.nanosec);
 
       RCLCPP_INFO(this->get_logger(), "Estimated Pose -> x: %.3f, y: %.3f, theta: %.3f", mu(0), mu(1), mu(2));
       RCLCPP_INFO(this->get_logger(), "Simplified uncertainty (trace of covariance): %.6f", sigma.trace());
@@ -99,7 +129,7 @@ class KF:public rclcpp::Node{
     Eigen::Matrix<double, 6, 1> mu;
     Eigen::Matrix<double, 6, 6> sigma;
 
-    void calculateKalman(const Eigen::Matrix<double, 2, 1> u, const Eigen::Matrix<double, 6, 1> z)
+    void calculateKalman(const Eigen::Matrix<double, 2, 1> &u, const Eigen::Matrix<double, 6, 1> &z)
     {
       double x = this->mu(0);
       double y = this->mu(1);
