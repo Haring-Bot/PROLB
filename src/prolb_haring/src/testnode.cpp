@@ -9,16 +9,17 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
 class KF:public rclcpp::Node{
   public:
-    double interval = 0.02;
+    double interval = 0.2;
 
 
     KF():Node("kalman_node"){
-      mu << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0;
       sigma = Eigen::Matrix<double, 6, 6>::Identity();
 
       odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
@@ -40,14 +41,14 @@ class KF:public rclcpp::Node{
         std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
         std::bind(&KF::timerCallback, this));
 
-      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/kf_pose", 10);
+      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/kf_pose", 10);
     }
   private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
 
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_pub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -86,20 +87,28 @@ class KF:public rclcpp::Node{
 
       calculateKalman();
 
-      geometry_msgs::msg::PoseStamped pose_msg;
+      geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
       pose_msg.header.stamp = this->now();
       pose_msg.header.frame_id = "map";  // or "odom", depending on your TF setup
 
-      pose_msg.pose.position.x = mu(0);
-      pose_msg.pose.position.y = mu(1);
-      pose_msg.pose.position.z = 0.0;
+      pose_msg.pose.pose.position.x = mu(0);
+      pose_msg.pose.pose.position.y = mu(1);
+      pose_msg.pose.pose.position.z = 0.0;
 
       tf2::Quaternion q;
       q.setRPY(0, 0, mu(2));
-      pose_msg.pose.orientation.x = q.x();
-      pose_msg.pose.orientation.y = q.y();
-      pose_msg.pose.orientation.z = q.z();
-      pose_msg.pose.orientation.w = q.w();
+      pose_msg.pose.pose.orientation.x = q.x();
+      pose_msg.pose.pose.orientation.y = q.y();
+      pose_msg.pose.pose.orientation.z = q.z();
+      pose_msg.pose.pose.orientation.w = q.w();
+
+      for (int i = 0; i < 6; ++i)
+      {
+        for (int j = 0; j < 6; ++j)
+        {
+          pose_msg.pose.covariance[i * 6 + j] = sigma(i, j);
+        }
+      }
 
       pose_pub_->publish(pose_msg);
       
@@ -150,6 +159,8 @@ class KF:public rclcpp::Node{
       z(4) = latestImu->linear_acceleration.x * sin(thetaImu) * interval;
       z(5) = latestImu->angular_velocity.z;
 
+      //RCLCPP_INFO(this->get_logger(), "Estimated Pose according to cmd_vel pred -> x: %.3f, y: %.3f, theta: %.3f", z(0), z(1), z(2));
+
       Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Identity();
       A(0,3) = interval;
       A(1,4) = interval;
@@ -163,12 +174,12 @@ class KF:public rclcpp::Node{
 
       Eigen::Matrix<double, 6, 1> muPred = A * mu + B * u;    //apply motion model
 
-      Eigen::Matrix<double, 6, 6> R = 0.1 * Eigen::MatrixXd::Identity(6,6); // Cov linear model
+      Eigen::Matrix<double, 6, 6> R = 0.3 * Eigen::MatrixXd::Identity(6,6); // Cov linear model
 
       Eigen::Matrix<double, 6, 6> sigmaPred = A * this->sigma * A.transpose() + R;    //predicted covariance
 
       Eigen::Matrix<double, 6, 6> C = Eigen::MatrixXd::Identity(6,6);
-      Eigen::Matrix<double, 6, 6> Q = 0.1 * Eigen::MatrixXd::Identity(6,6);
+      Eigen::Matrix<double, 6, 6> Q = 0.3 * Eigen::MatrixXd::Identity(6,6);
       Eigen::Matrix<double, 6, 6> kalmanGain = sigmaPred * C.transpose() * (C * sigmaPred * C.transpose() + Q).inverse();     //calculate Kalman Gain
 
       Eigen::Matrix<double, 6, 1> muCor = muPred + kalmanGain * (z - C * muPred);       //correct prediction based on Kalman Gain
@@ -176,6 +187,8 @@ class KF:public rclcpp::Node{
     
       this->mu = muCor;
       this->sigma = sigmaCor;
+
+      printMatrix(kalmanGain, "kalmanGain");
 
       return;
     }
@@ -186,6 +199,23 @@ class KF:public rclcpp::Node{
       double roll, pitch, yaw;
       tf2::Matrix3x3(tf_q).getRPY(roll, pitch, yaw);
       return yaw;
+    }
+
+    void printMatrix(const Eigen::MatrixXd& matrix, const std::string& name = "Matrix")
+    {
+      RCLCPP_INFO(this->get_logger(), "%s (%dx%d):", name.c_str(), 
+                  static_cast<int>(matrix.rows()), static_cast<int>(matrix.cols()));
+      
+      for (int i = 0; i < matrix.rows(); ++i)
+      {
+        std::string row_str = "";
+        for (int j = 0; j < matrix.cols(); ++j)
+        {
+          row_str += std::to_string(matrix(i, j));
+          if (j < matrix.cols() - 1) row_str += ", ";
+        }
+        RCLCPP_INFO(this->get_logger(), "  [%s]", row_str.c_str());
+      }
     }
 
 };

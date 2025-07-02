@@ -68,12 +68,16 @@ def generate_launch_description():
         launch_arguments={"use_sim_time": use_sim_time}.items()
     )
 
+    # Path to your custom RViz config
+    rviz_config_path = os.path.join(pkg_share, "config", "rviz_setup.rviz")
+    
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(nav2_launch),
         launch_arguments={
             "map": map_file,
             "use_sim_time": use_sim_time,
-            "autostart": autostart
+            "autostart": autostart,
+            "rviz_config_file": rviz_config_path
         }.items()
     )
 
