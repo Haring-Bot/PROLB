@@ -89,6 +89,14 @@ def generate_launch_description():
         parameters=[{"use_sim_time": use_sim_time}]
     )
 
+    nav_node = Node(
+        package="prolb_haring",
+        executable="navnode",
+        name="navigation",
+        output="screen",
+        parameters=[{"use_sim_time": use_sim_time}]
+    )
+
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_autostart_cmd,
@@ -97,5 +105,6 @@ def generate_launch_description():
         map_to_odom_static_transform,
         initial_pose_pub,
         nav2,
-        kf_node
+        kf_node,
+        nav_node
     ])

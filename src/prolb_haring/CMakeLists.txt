@@ -20,6 +20,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 
 # Set C++ standard to C++17
 set(CMAKE_CXX_STANDARD 17)
@@ -39,9 +40,14 @@ ament_target_dependencies(testnode
 
 target_link_libraries(testnode Eigen3::Eigen)
 
+# Add navnode executable
+add_executable(navnode src/navnode.cpp)
+ament_target_dependencies(navnode rclcpp rclcpp_action nav2_msgs)
+
 # Install executables
 install(TARGETS
   testnode
+  navnode
   DESTINATION lib/${PROJECT_NAME}
 )
 
