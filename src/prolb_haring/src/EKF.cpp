@@ -168,17 +168,17 @@ class EKF:public rclcpp::Node{
       f(0) = x + u(0) * interval * cos(theta);
       f(1) = y + u(0) * interval * sin(theta);
       f(2) = theta + u(1) * interval;
-      f(3) = x_vel + cos(theta) * u(0);
-      f(4) = y_vel + sin(theta) * u(0);
+      f(3) = cos(theta) * u(0);
+      f(4) = sin(theta) * u(0);
       f(5) = omega + u(1);
 
       //calculated jacobian by hand
       Eigen::Matrix<double, 6, 6> F = Eigen::MatrixXd::Identity(6,6);
-      F(0, 2) = -u(0) * interval * sin(theta);
-      F(0, 3) = interval * cos(theta);
-      F(1, 2) = u(0) * interval * cos(theta);
-      F(1, 3) = interval * sin(theta);
+      F(0, 3) = interval;
+      F(1, 4) = interval;
       F(2, 5) = interval;
+      F(3, 2) = -u(0) * sin(theta);
+      F(4, 2) = u(0) * cos(theta); 
 
       Eigen::Matrix<double, 6, 1> muPred = f;    //apply motion model
 
@@ -186,7 +186,7 @@ class EKF:public rclcpp::Node{
 
       Eigen::Matrix<double, 6, 6> sigmaPred = F * this->sigma * F.transpose() + R;    //predicted covariance
 
-      Eigen::Matrix<double, 6, 1> h = mu;       //since mu and z have the same composition no transformation is needed
+      Eigen::Matrix<double, 6, 1> h = muPred;       //since mu and z have the same composition no transformation is needed
       Eigen::Matrix<double, 6, 6> H = Eigen::MatrixXd::Identity(6,6);   //Identity since mu and z have the same composition
       Eigen::Matrix<double, 6, 6> Q = loadMatrixFromYaml("settings.yaml", "Q");
       Eigen::Matrix<double, 6, 6> kalmanGain = sigmaPred * H.transpose() * (H * sigmaPred * H.transpose() + Q).inverse();     //calculate Kalman Gain
