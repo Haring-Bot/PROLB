@@ -21,6 +21,9 @@ find_package(Eigen3 REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+find_package(ament_index_cpp REQUIRED)
 
 # Set C++ standard to C++17
 set(CMAKE_CXX_STANDARD 17)
@@ -36,6 +39,7 @@ ament_target_dependencies(KF
   geometry_msgs
   tf2
   tf2_geometry_msgs
+  ament_index_cpp
 )
 
 add_executable(EKF src/EKF.cpp)
@@ -49,7 +53,8 @@ ament_target_dependencies(EKF
   tf2_geometry_msgs
 )
 
-target_link_libraries(KF Eigen3::Eigen)
+target_link_libraries(KF Eigen3::Eigen ${YAML_CPP_LIBRARIES})
+target_include_directories(KF PRIVATE ${YAML_CPP_INCLUDE_DIRS})
 target_link_libraries(EKF Eigen3::Eigen)
 
 # Add navnode executable
@@ -73,6 +78,12 @@ install(DIRECTORY
 # Install map files
 install(DIRECTORY
   map
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Install config files
+install(DIRECTORY
+  config
   DESTINATION share/${PROJECT_NAME}
 )
 

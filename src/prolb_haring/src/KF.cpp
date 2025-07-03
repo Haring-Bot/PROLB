@@ -1,6 +1,8 @@
 #include <memory>
 #include <chrono>
 #include <Eigen/Dense>
+#include <yaml-cpp/yaml.h>
+#include <iostream>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -12,6 +14,7 @@
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 class KF:public rclcpp::Node{
   public:
@@ -178,7 +181,8 @@ class KF:public rclcpp::Node{
 
       Eigen::Matrix<double, 6, 6> sigmaPred = A * this->sigma * A.transpose() + R;    //predicted covariance
 
-      Eigen::Matrix<double, 6, 6> C = Eigen::MatrixXd::Identity(6,6);
+      Eigen::Matrix<double, 6, 6> C = loadMatrixFromYaml("settings.yaml", "identity6x6");
+      printMatrix(C, "C");
       Eigen::Matrix<double, 6, 6> Q = 0.3 * Eigen::MatrixXd::Identity(6,6);
       Eigen::Matrix<double, 6, 6> kalmanGain = sigmaPred * C.transpose() * (C * sigmaPred * C.transpose() + Q).inverse();     //calculate Kalman Gain
 
@@ -217,6 +221,39 @@ class KF:public rclcpp::Node{
         RCLCPP_INFO(this->get_logger(), "  [%s]", row_str.c_str());
       }
     }
+
+  Eigen::MatrixXd loadMatrixFromYaml(const std::string & yaml_file, const std::string & matrix_name)
+  {
+    try
+    {
+      YAML::Node config = YAML::LoadFile(ament_index_cpp::get_package_share_directory("prolb_haring") + "/config/" + yaml_file);
+      if (!config[matrix_name])
+      {
+        throw std::runtime_error("Matrix '" + matrix_name + "' not found in YAML file.");
+      }
+
+      auto matrix_node = config[matrix_name];
+      int rows = matrix_node["rows"].as<int>();
+      int cols = matrix_node["cols"].as<int>();
+
+      Eigen::MatrixXd matrix(rows, cols);
+      auto data_node = matrix_node["data"];
+
+      for (int i = 0; i < rows; ++i)
+      {
+        for (int j = 0; j < cols; ++j)
+        {
+          matrix(i, j) = data_node[i][j].as<double>();
+        }
+      }
+
+      return matrix;
+    }
+    catch (const YAML::Exception & e)
+    {
+      throw std::runtime_error("Failed to load YAML file: " + std::string(e.what()));
+    }
+  }
 
 };
 
