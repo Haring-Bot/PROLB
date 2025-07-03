@@ -177,13 +177,13 @@ class KF:public rclcpp::Node{
 
       Eigen::Matrix<double, 6, 1> muPred = A * mu + B * u;    //apply motion model
 
-      Eigen::Matrix<double, 6, 6> R = 0.3 * Eigen::MatrixXd::Identity(6,6); // Cov linear model
+      Eigen::Matrix<double, 6, 6> R = loadMatrixFromYaml("settings.yaml", "R"); // Cov linear model
 
       Eigen::Matrix<double, 6, 6> sigmaPred = A * this->sigma * A.transpose() + R;    //predicted covariance
 
-      Eigen::Matrix<double, 6, 6> C = loadMatrixFromYaml("settings.yaml", "identity6x6");
-      printMatrix(C, "C");
-      Eigen::Matrix<double, 6, 6> Q = 0.3 * Eigen::MatrixXd::Identity(6,6);
+      Eigen::Matrix<double, 6, 6> C = loadMatrixFromYaml("settings.yaml", "C");
+      //printMatrix(C, "C");
+      Eigen::Matrix<double, 6, 6> Q = loadMatrixFromYaml("settings.yaml", "Q");
       Eigen::Matrix<double, 6, 6> kalmanGain = sigmaPred * C.transpose() * (C * sigmaPred * C.transpose() + Q).inverse();     //calculate Kalman Gain
 
       Eigen::Matrix<double, 6, 1> muCor = muPred + kalmanGain * (z - C * muPred);       //correct prediction based on Kalman Gain
@@ -192,7 +192,7 @@ class KF:public rclcpp::Node{
       this->mu = muCor;
       this->sigma = sigmaCor;
 
-      printMatrix(kalmanGain, "kalmanGain");
+      //printMatrix(kalmanGain, "kalmanGain");
 
       return;
     }

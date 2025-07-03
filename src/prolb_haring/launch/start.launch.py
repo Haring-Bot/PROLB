@@ -102,13 +102,13 @@ def generate_launch_description():
         parameters=[{"use_sim_time": use_sim_time}]
     )
 
-    # ekf_node = Node(
-    #     package="prolb_haring",
-    #     executable="EKF",
-    #     name="extended_kalman_filter",
-    #     output="screen",
-    #     parameters=[{"use_sim_time": use_sim_time}]
-    # )
+    ekf_node = Node(
+        package="prolb_haring",
+        executable="EKF",
+        name="extended_kalman_filter",
+        output="screen",
+        parameters=[{"use_sim_time": use_sim_time}]
+    )
 
     nav_node = Node(
         package="prolb_haring",
@@ -127,6 +127,6 @@ def generate_launch_description():
         nav2,
         rviz_node,
         kf_node,
-        #ekf_node,
+        ekf_node,
         nav_node
     ])

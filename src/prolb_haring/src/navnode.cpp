@@ -85,7 +85,7 @@ int main(int argc, char ** argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<nav>();
 
-    rclcpp::sleep_for(std::chrono::seconds(10));  //some time for startup
+    rclcpp::sleep_for(std::chrono::seconds(5));  //some time for startup
     node->set_initial_pose(-2.0, -0.5, 0);
     rclcpp::spin_some(node);
 

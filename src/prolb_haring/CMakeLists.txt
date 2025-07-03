@@ -51,11 +51,13 @@ ament_target_dependencies(EKF
   geometry_msgs
   tf2
   tf2_geometry_msgs
+  ament_index_cpp
 )
 
 target_link_libraries(KF Eigen3::Eigen ${YAML_CPP_LIBRARIES})
 target_include_directories(KF PRIVATE ${YAML_CPP_INCLUDE_DIRS})
-target_link_libraries(EKF Eigen3::Eigen)
+target_link_libraries(EKF Eigen3::Eigen ${YAML_CPP_LIBRARIES})
+target_include_directories(EKF PRIVATE ${YAML_CPP_INCLUDE_DIRS})
 
 # Add navnode executable
 add_executable(navnode src/navnode.cpp)
