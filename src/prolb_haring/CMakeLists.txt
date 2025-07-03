@@ -38,7 +38,19 @@ ament_target_dependencies(KF
   tf2_geometry_msgs
 )
 
+add_executable(EKF src/EKF.cpp)
+ament_target_dependencies(EKF 
+  rclcpp
+  std_msgs
+  nav_msgs
+  sensor_msgs
+  geometry_msgs
+  tf2
+  tf2_geometry_msgs
+)
+
 target_link_libraries(KF Eigen3::Eigen)
+target_link_libraries(EKF Eigen3::Eigen)
 
 # Add navnode executable
 add_executable(navnode src/navnode.cpp)
@@ -47,6 +59,7 @@ ament_target_dependencies(navnode rclcpp rclcpp_action nav2_msgs)
 # Install executables
 install(TARGETS
   KF
+  EKF
   navnode
   DESTINATION lib/${PROJECT_NAME}
 )

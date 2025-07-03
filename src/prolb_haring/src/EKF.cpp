@@ -18,7 +18,7 @@ class EKF:public rclcpp::Node{
     double interval = 0.2;
 
 
-    EKF():Node("kalman_node"){
+    EKF():Node("extenden_kalman_node"){
       mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0;
       sigma = Eigen::Matrix<double, 6, 6>::Identity();
 
@@ -41,7 +41,7 @@ class EKF:public rclcpp::Node{
         std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
         std::bind(&EKF::timerCallback, this));
 
-      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/kf_pose", 10);
+      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/ekf_pose", 10);
     }
   private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
@@ -164,7 +164,7 @@ class EKF:public rclcpp::Node{
       Eigen::Matrix<double, 6, 1> f;
       f(0) = x + u(0) * interval * cos(theta);
       f(1) = y + u(0) * interval * sin(theta);
-      f(2) = theta + omega * interval;
+      f(2) = theta + u(1) * interval;
       f(3) = x_vel + cos(theta) * u(0);
       f(4) = y_vel + sin(theta) * u(0);
       f(5) = omega + u(1);
