@@ -27,8 +27,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Add executable
-add_executable(testnode src/testnode.cpp)
-ament_target_dependencies(testnode 
+add_executable(KF src/KF.cpp)
+ament_target_dependencies(KF 
   rclcpp
   std_msgs
   nav_msgs
@@ -38,7 +38,7 @@ ament_target_dependencies(testnode
   tf2_geometry_msgs
 )
 
-target_link_libraries(testnode Eigen3::Eigen)
+target_link_libraries(KF Eigen3::Eigen)
 
 # Add navnode executable
 add_executable(navnode src/navnode.cpp)
@@ -46,7 +46,7 @@ ament_target_dependencies(navnode rclcpp rclcpp_action nav2_msgs)
 
 # Install executables
 install(TARGETS
-  testnode
+  KF
   navnode
   DESTINATION lib/${PROJECT_NAME}
 )
