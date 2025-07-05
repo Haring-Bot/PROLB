@@ -115,12 +115,12 @@ class KF:public rclcpp::Node{
 
       pose_pub_->publish(pose_msg);
       
-      RCLCPP_INFO(this->get_logger(), "Publishing pose at time: %u.%u",
-      pose_msg.header.stamp.sec,
-      pose_msg.header.stamp.nanosec);
+      //RCLCPP_INFO(this->get_logger(), "Publishing pose at time: %u.%u",
+      //pose_msg.header.stamp.sec,
+      //pose_msg.header.stamp.nanosec);
 
-      RCLCPP_INFO(this->get_logger(), "Estimated Pose -> x: %.3f, y: %.3f, theta: %.3f", mu(0), mu(1), mu(2));
-      RCLCPP_INFO(this->get_logger(), "Simplified uncertainty (trace of covariance): %.6f", sigma.trace());
+      //RCLCPP_INFO(this->get_logger(), "Estimated Pose -> x: %.3f, y: %.3f, theta: %.3f", mu(0), mu(1), mu(2));
+      //RCLCPP_INFO(this->get_logger(), "Simplified uncertainty (trace of covariance): %.6f", sigma.trace());
 
     }
 

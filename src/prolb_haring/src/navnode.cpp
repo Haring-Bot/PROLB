@@ -22,7 +22,8 @@ public:
         goal.pose.header.stamp = this->now();
         goal.pose.pose.position.x = x;
         goal.pose.pose.position.y = y;
-        goal.pose.pose.orientation.w = theta;
+        goal.pose.pose.orientation.z = sin(theta/2.0);
+        goal.pose.pose.orientation.w = cos(theta/2.0);
 
         RCLCPP_INFO(this->get_logger(), "Sending goal to x=%.3f, y=%.3f, theta=%.3f", x, y, theta);
 
@@ -85,16 +86,17 @@ int main(int argc, char ** argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<nav>();
 
-    rclcpp::sleep_for(std::chrono::seconds(5));  //some time for startup
+    rclcpp::sleep_for(std::chrono::seconds(5));
     node->set_initial_pose(-2.0, -0.5, 0);
     rclcpp::spin_some(node);
 
-    rclcpp::sleep_for(std::chrono::seconds(2));  //some time for startup
+    rclcpp::sleep_for(std::chrono::seconds(2));
 
-    node->send_goal(2.0, -0.5, 0.0);
-    node->send_goal(2.0, 0.5, 0.0);
-    node->send_goal(-2.0, 0.5, 0.0);
-    node->send_goal(-2.0, -0.5, 0.0);
+    // Counter-clockwise starting north
+    node->send_goal(2.0, -0.5, M_PI/2);     // North
+    node->send_goal(2.0, 0.5, M_PI);        // West  
+    node->send_goal(-2.0, 0.5, -M_PI/2);    // South
+    node->send_goal(-2.0, -0.5, 0.0);       // East
 
     rclcpp::shutdown();
     return 0;
