@@ -8,6 +8,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "nav_msgs/msg/path.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
@@ -45,6 +46,8 @@ class EKF:public rclcpp::Node{
         std::bind(&EKF::timerCallback, this));
 
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/ekf_pose", 10);
+      path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/ekf_path", 10);
+      path_msg_.header.frame_id = "map";
     }
   private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
@@ -52,12 +55,14 @@ class EKF:public rclcpp::Node{
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
 
     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::unique_ptr<nav_msgs::msg::Odometry> latestOdom;
     std::unique_ptr<geometry_msgs::msg::TwistStamped> latestCmd_vel;
     std::unique_ptr<sensor_msgs::msg::Imu> latestImu;
+      nav_msgs::msg::Path path_msg_;
     
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
@@ -112,6 +117,17 @@ class EKF:public rclcpp::Node{
           pose_msg.pose.covariance[i * 6 + j] = sigma(i, j);
         }
       }
+
+
+      // Create PoseStamped from PoseWithCovarianceStamped
+      geometry_msgs::msg::PoseStamped path_pose;
+      path_pose.header = pose_msg.header;
+      path_pose.pose = pose_msg.pose.pose;  // Extract the pose from pose.pose
+
+      path_msg_.header.stamp = this->now();
+      path_msg_.poses.push_back(path_pose);
+
+      path_pub_->publish(path_msg_);
 
       pose_pub_->publish(pose_msg);
       

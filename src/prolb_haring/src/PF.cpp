@@ -14,6 +14,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "nav_msgs/msg/path.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -37,6 +38,7 @@ class PF:public rclcpp::Node{
     double interval = 0.2;
     std::vector<Particle> particles;
     const int amount_particles = 1000;
+    nav_msgs::msg::Path path_msg_;
 
 
 
@@ -76,6 +78,8 @@ class PF:public rclcpp::Node{
 
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/pf_pose", 10);
       particles_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/pf_particles", 10);
+      path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/pf_path", 10);
+      path_msg_.header.frame_id = "map";
     
     }
   private:
@@ -87,6 +91,7 @@ class PF:public rclcpp::Node{
 
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr particles_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -370,13 +375,10 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
     pose_msg.pose.orientation.z = q.z();
     pose_msg.pose.orientation.w = q.w();
 
-    // for (int i = 0; i < 6; ++i)
-    // {
-    //   for (int j = 0; j < 6; ++j)
-    //   {
-    //     pose_msg.pose.covariance[i * 6 + j] = sigma(i, j);
-    //   }
-    // }
+    path_msg_.header.stamp = this->now();
+    path_msg_.poses.push_back(pose_msg);
+
+    path_pub_->publish(path_msg_);
 
     pose_pub_->publish(pose_msg);
     

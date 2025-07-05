@@ -93,10 +93,10 @@ int main(int argc, char ** argv) {
     rclcpp::sleep_for(std::chrono::seconds(2));
 
     // Counter-clockwise starting north
-    node->send_goal(2.0, -0.5, M_PI/2);     // North
-    node->send_goal(2.0, 0.5, M_PI);        // West  
-    node->send_goal(-2.0, 0.5, -M_PI/2);    // South
-    node->send_goal(-2.0, -0.5, 0.0);       // East
+    node->send_goal(2.0, 0.0, M_PI);        // West  
+    node->send_goal(0.0, 2.0, -M_PI/2);    // South
+    node->send_goal(-2.0, 0.0, M_PI/2);     // North
+    node->send_goal(0.0, -2.0, 0.0);       // East
 
     rclcpp::shutdown();
     return 0;
