@@ -110,6 +110,14 @@ def generate_launch_description():
         parameters=[{"use_sim_time": use_sim_time}]
     )
 
+    pf_node = Node(
+        package="prolb_haring",
+        executable="PF",
+        name="particle_filter",
+        output="screen",
+        parameters=[{"use_sim_time": use_sim_time}]
+    )
+
     nav_node = Node(
         package="prolb_haring",
         executable="navnode",
@@ -128,5 +136,6 @@ def generate_launch_description():
         rviz_node,
         kf_node,
         ekf_node,
+        pf_node,
         nav_node
     ])

@@ -54,10 +54,26 @@ ament_target_dependencies(EKF
   ament_index_cpp
 )
 
+add_executable(PF src/PF.cpp)
+ament_target_dependencies(PF
+  rclcpp
+  std_msgs
+  nav_msgs
+  sensor_msgs
+  geometry_msgs
+  tf2
+  tf2_geometry_msgs
+  Eigen3
+  ament_index_cpp
+)
+
 target_link_libraries(KF Eigen3::Eigen ${YAML_CPP_LIBRARIES})
 target_include_directories(KF PRIVATE ${YAML_CPP_INCLUDE_DIRS})
 target_link_libraries(EKF Eigen3::Eigen ${YAML_CPP_LIBRARIES})
 target_include_directories(EKF PRIVATE ${YAML_CPP_INCLUDE_DIRS})
+target_link_libraries(PF
+  yaml-cpp
+)
 
 # Add navnode executable
 add_executable(navnode src/navnode.cpp)
@@ -67,6 +83,7 @@ ament_target_dependencies(navnode rclcpp rclcpp_action nav2_msgs)
 install(TARGETS
   KF
   EKF
+  PF
   navnode
   DESTINATION lib/${PROJECT_NAME}
 )
