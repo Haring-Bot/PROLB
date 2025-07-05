@@ -74,7 +74,7 @@ class PF:public rclcpp::Node{
         std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
         std::bind(&PF::timerCallback, this));
 
-      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/pf_pose", 10);
+      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/pf_pose", 10);
       particles_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/pf_particles", 10);
     
     }
@@ -85,7 +85,7 @@ class PF:public rclcpp::Node{
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
 
-    rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr particles_pub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
@@ -309,10 +309,17 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
         return particles;
     }
     
+    double highest_weight = 0.0;
+    Particle highest_Particle;
+
     // Normalize weights
     for(auto& particle : particles){
         particle.weight /= weight_sum;
-    }
+        if(particle.weight > highest_weight){
+          highest_weight = particle.weight;
+          highest_Particle = particle;  
+        }
+      }
 
     // Simple multinomial resampling with noise
     std::vector<Particle> new_particles;
@@ -346,7 +353,32 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
         new_particles.push_back(new_particle);
     }
 
-    RCLCPP_INFO(this->get_logger(), "X: %f, Y: %f", new_particles[0].x, new_particles[0].y);
+    RCLCPP_INFO(this->get_logger(), "X: %f, Y: %f", highest_Particle.x, highest_Particle.y);
+
+    geometry_msgs::msg::PoseStamped pose_msg;
+    pose_msg.header.stamp = this->now();
+    pose_msg.header.frame_id = "map";  // or "odom", depending on your TF setup
+
+    pose_msg.pose.position.x = highest_Particle.x;
+    pose_msg.pose.position.y = highest_Particle.y;
+    pose_msg.pose.position.z = highest_Particle.theta;
+
+    tf2::Quaternion q;
+    q.setRPY(0, 0, highest_Particle.theta);
+    pose_msg.pose.orientation.x = q.x();
+    pose_msg.pose.orientation.y = q.y();
+    pose_msg.pose.orientation.z = q.z();
+    pose_msg.pose.orientation.w = q.w();
+
+    // for (int i = 0; i < 6; ++i)
+    // {
+    //   for (int j = 0; j < 6; ++j)
+    //   {
+    //     pose_msg.pose.covariance[i * 6 + j] = sigma(i, j);
+    //   }
+    // }
+
+    pose_pub_->publish(pose_msg);
     
     return new_particles;
 }
