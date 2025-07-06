@@ -95,8 +95,8 @@ int main(int argc, char ** argv) {
     // Counter-clockwise starting north
     node->send_goal(2.0, 0.0, M_PI);        // West  
     node->send_goal(0.0, 2.0, -M_PI/2);    // South
-    node->send_goal(-2.0, 0.0, M_PI/2);     // North
     node->send_goal(0.0, -2.0, 0.0);       // East
+    node->send_goal(-2.0, 0.0, M_PI/2);     // North
 
     rclcpp::shutdown();
     return 0;

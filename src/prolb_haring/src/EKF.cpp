@@ -19,7 +19,7 @@
 
 class EKF:public rclcpp::Node{
   public:
-    double interval = 0.2;
+    double interval = 0.2; //s
 
 
     EKF():Node("extended_kalman_node"){
@@ -42,7 +42,7 @@ class EKF:public rclcpp::Node{
         std::bind(&EKF::imuCallback, this, std::placeholders::_1));
 
       timer_ = this->create_wall_timer(
-        std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
+        std::chrono::duration<double>(interval),
         std::bind(&EKF::timerCallback, this));
 
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/ekf_pose", 10);
@@ -97,7 +97,7 @@ class EKF:public rclcpp::Node{
 
       geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
       pose_msg.header.stamp = this->now();
-      pose_msg.header.frame_id = "map";  // or "odom", depending on your TF setup
+      pose_msg.header.frame_id = "map";
 
       pose_msg.pose.pose.position.x = mu(0);
       pose_msg.pose.pose.position.y = mu(1);
@@ -118,11 +118,9 @@ class EKF:public rclcpp::Node{
         }
       }
 
-
-      // Create PoseStamped from PoseWithCovarianceStamped
       geometry_msgs::msg::PoseStamped path_pose;
       path_pose.header = pose_msg.header;
-      path_pose.pose = pose_msg.pose.pose;  // Extract the pose from pose.pose
+      path_pose.pose = pose_msg.pose.pose; 
 
       path_msg_.header.stamp = this->now();
       path_msg_.poses.push_back(path_pose);
@@ -180,23 +178,62 @@ class EKF:public rclcpp::Node{
 
       //RCLCPP_INFO(this->get_logger(), "Estimated Pose according to cmd_vel pred -> x: %.3f, y: %.3f, theta: %.3f", z(0), z(1), z(2));
 
+      if(omega == 0){
+        omega = 0.0001;
+      }
+                          // ### simpler but more effective ###
+      // Eigen::Matrix<double, 6, 1> f;
+      // f(0) = x + u(0) * interval * cos(theta);
+      // f(1) = y + u(0) * interval * sin(theta);
+      // f(2) = theta + u(1) * interval;
+      // f(3) = cos(theta) * u(0);
+      // f(4) = sin(theta) * u(0);
+      // f(5) = omega + u(1);
+
+      // //calculated jacobian by hand
+      // Eigen::Matrix<double, 6, 6> F = Eigen::MatrixXd::Identity(6,6);
+      // F(0, 3) = interval;
+      // F(1, 4) = interval;
+      // F(2, 5) = interval;
+      // F(3, 2) = -u(0) * sin(theta);
+      // F(4, 2) = u(0) * cos(theta); 
+
+
       Eigen::Matrix<double, 6, 1> f;
-      f(0) = x + u(0) * interval * cos(theta);
-      f(1) = y + u(0) * interval * sin(theta);
-      f(2) = theta + u(1) * interval;
+      f(0) = -(x_vel/omega) * sin(theta) + (x_vel/omega) * sin(theta + omega * interval);
+      f(1) = (x_vel/omega) * cos(theta) - (x_vel/omega) * cos(theta + omega * interval);
+      f(2) = omega * interval;
       f(3) = cos(theta) * u(0);
       f(4) = sin(theta) * u(0);
       f(5) = omega + u(1);
 
       //calculated jacobian by hand
-      Eigen::Matrix<double, 6, 6> F = Eigen::MatrixXd::Identity(6,6);
-      F(0, 3) = interval;
-      F(1, 4) = interval;
-      F(2, 5) = interval;
-      F(3, 2) = -u(0) * sin(theta);
-      F(4, 2) = u(0) * cos(theta); 
+      Eigen::Matrix<double, 6, 6> F = Eigen::Matrix<double, 6, 6>::Identity();
 
-      Eigen::Matrix<double, 6, 1> muPred = f;    //apply motion model
+      double sin_theta = sin(theta);
+      double cos_theta = cos(theta);
+      double sin_theta_omega_dt = sin(theta + omega * interval);
+      double cos_theta_omega_dt = cos(theta + omega * interval);
+
+      double xvel_over_omega = x_vel / omega;
+      double omega_sq = omega * omega;
+      F(0, 2) = -xvel_over_omega * cos_theta + xvel_over_omega * cos_theta_omega_dt;
+      F(0, 3) = -sin_theta / omega + sin_theta_omega_dt / omega;
+      F(0, 5) = (x_vel / omega_sq) * sin_theta - (x_vel / omega_sq) * sin_theta_omega_dt + (xvel_over_omega) * interval * cos_theta_omega_dt;
+
+      F(1, 2) = -xvel_over_omega * sin_theta + xvel_over_omega * sin_theta_omega_dt;
+      F(1, 3) = cos_theta / omega - cos_theta_omega_dt / omega;
+      F(1, 5) = - (x_vel / omega_sq) * cos_theta + (x_vel / omega_sq) * cos_theta_omega_dt + (xvel_over_omega) * interval * sin_theta_omega_dt;
+
+      F(2, 5) = interval;
+
+      F(3, 2) = -sin_theta * u(0);
+
+      F(4, 2) = cos_theta * u(0);
+
+      F(5, 5) = 1.0;
+
+      Eigen::Matrix<double, 6, 1> muPred = mu + f;    //apply motion model
 
       Eigen::Matrix<double, 6, 6> R = loadMatrixFromYaml("settings.yaml", "R"); // Cov linear model
 
