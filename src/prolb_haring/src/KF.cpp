@@ -1,5 +1,6 @@
 #include <memory>
 #include <chrono>
+#include <algorithm>
 #include <Eigen/Dense>
 #include <yaml-cpp/yaml.h>
 #include <iostream>
@@ -13,19 +14,23 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 class KF:public rclcpp::Node{
   public:
-    double interval = 0.2;
-
+    double interval = 0.2; //filter update rate
 
     KF():Node("kalman_node"){
-      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0;
-      sigma = Eigen::Matrix<double, 6, 6>::Identity();
+      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0; //initial state
+      sigma = Eigen::Matrix<double, 6, 6>::Identity(); //initial covariance
 
+      //subscribe to sensor data
       odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
         "/odom", 
         10,
@@ -41,10 +46,15 @@ class KF:public rclcpp::Node{
         10,
         std::bind(&KF::imuCallback, this, std::placeholders::_1));
 
+      //initialize TF2 buffer and listener
+      tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+      tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
       timer_ = this->create_wall_timer(
         std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
         std::bind(&KF::timerCallback, this));
 
+      //publishers
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/kf_pose", 10);
       path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/kf_path", 10);
       path_msg_.header.frame_id = "map";
@@ -55,6 +65,10 @@ class KF:public rclcpp::Node{
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+
+    //TF2 for getting true pose
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
@@ -67,6 +81,8 @@ class KF:public rclcpp::Node{
     std::unique_ptr<sensor_msgs::msg::Imu> latestImu;
     nav_msgs::msg::Path path_msg_;
     nav_msgs::msg::Path true_path_msg_;
+    std::string target_frame_ = "base_link";
+    std::string source_frame_ = "map";
     
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
@@ -85,6 +101,7 @@ class KF:public rclcpp::Node{
 
     void timerCallback()
     {
+      //check if all sensor data is available
       if (!latestOdom || !latestCmd_vel || !latestImu)
       {
         std::string waiting_msg = "Waiting for data from:";
@@ -96,12 +113,13 @@ class KF:public rclcpp::Node{
         return;
       }
 
-
+      //run kalman filter
       calculateKalman();
 
+      //prepare pose message
       geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
       pose_msg.header.stamp = this->now();
-      pose_msg.header.frame_id = "map";  // or "odom", depending on your TF setup
+      pose_msg.header.frame_id = "map";
 
       pose_msg.pose.pose.position.x = mu(0);
       pose_msg.pose.pose.position.y = mu(1);
@@ -114,6 +132,7 @@ class KF:public rclcpp::Node{
       pose_msg.pose.pose.orientation.z = q.z();
       pose_msg.pose.pose.orientation.w = q.w();
 
+      //set covariance matrix
       for (int i = 0; i < 6; ++i)
       {
         for (int j = 0; j < 6; ++j)
@@ -122,7 +141,7 @@ class KF:public rclcpp::Node{
         }
       }
 
-      // Create PoseStamped from PoseWithCovarianceStamped
+      //create PoseStamped from PoseWithCovarianceStamped
       geometry_msgs::msg::PoseStamped path_pose;
       path_pose.header = pose_msg.header;
       path_pose.pose = pose_msg.pose.pose;  // Extract the pose from pose.pose
@@ -132,17 +151,22 @@ class KF:public rclcpp::Node{
 
       path_pub_->publish(path_msg_);
 
-
+      //get robot true pose from TF2
       geometry_msgs::msg::PoseStamped true_path_pose;
       true_path_pose.header = pose_msg.header;
-      true_path_pose.pose.position.x = latestOdom->pose.pose.position.x - 2.0;
-      true_path_pose.pose.position.y = latestOdom->pose.pose.position.y - 0.5;
-      true_path_pose.pose.orientation.z = latestOdom->pose.pose.orientation.z;
       
-      true_path_msg_.header.stamp = this->now();
-      true_path_msg_.poses.push_back(true_path_pose);
-      
-      true_path_pub_->publish(true_path_msg_);
+      if (getRobotTruePoseFromTF(true_path_pose.pose))
+      {
+        true_path_msg_.header.stamp = this->now();
+        true_path_msg_.poses.push_back(true_path_pose);
+        true_path_pub_->publish(true_path_msg_);
+      }
+      else
+      {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                            "Could not get transform from '%s' to '%s'", 
+                            source_frame_.c_str(), target_frame_.c_str());
+      }
 
       pose_pub_->publish(pose_msg);
       
@@ -159,14 +183,15 @@ class KF:public rclcpp::Node{
     //   Eigen::Matrix<double, 6, 1> mu;
     //   Eigen::Matrix<double, 6, 6> sigma;
     // };
-    Eigen::Matrix<double, 6, 1> mu;
-    Eigen::Matrix<double, 6, 6> sigma;
+    Eigen::Matrix<double, 6, 1> mu; //state vector
+    Eigen::Matrix<double, 6, 6> sigma; //covariance matrix
 
     void calculateKalman()
     {
-      Eigen::Matrix<double, 2, 1> u;
-      Eigen::Matrix<double, 6, 1> z;
+      Eigen::Matrix<double, 2, 1> u; //control input
+      Eigen::Matrix<double, 6, 1> z; //measurement vector
 
+      //current state
       double x = this->mu(0);
       double y = this->mu(1);
       double theta = this->mu(2);
@@ -174,9 +199,11 @@ class KF:public rclcpp::Node{
       double y_vel = this->mu(4);
       double omega = this->mu(5);
 
+      //control input from cmd_vel
       u(0) = latestCmd_vel->twist.linear.x;
       u(1) = latestCmd_vel->twist.angular.z;
 
+      //extract yaw from IMU quaternion
       tf2::Quaternion qImu(
         latestImu->orientation.x,
         latestImu->orientation.y,
@@ -186,6 +213,7 @@ class KF:public rclcpp::Node{
       double roll, pitch, thetaImu;
       tf2::Matrix3x3(qImu).getRPY(roll, pitch, thetaImu);
 
+      //construct measurement vector
       z(0) = x + (latestOdom->twist.twist.linear.x * cos(thetaImu) * interval);
       z(1) = y + (latestOdom->twist.twist.linear.x * sin(thetaImu) * interval);
       z(2) = thetaImu;
@@ -195,31 +223,41 @@ class KF:public rclcpp::Node{
 
       //RCLCPP_INFO(this->get_logger(), "Estimated Pose according to cmd_vel pred -> x: %.3f, y: %.3f, theta: %.3f", z(0), z(1), z(2));
 
+      //state transition matrix
       Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Identity();
       A(0,3) = interval;
       A(1,4) = interval;
       A(2,5) = interval;
 
+      //control input matrix
       Eigen::Matrix<double, 6, 2> B;
       B.setZero();
       B(3, 0) = cos(theta);
       B(4, 0) = sin(theta);
       B(5, 1) = 1;
 
+      //predict state
       Eigen::Matrix<double, 6, 1> muPred = A * mu + B * u;    //apply motion model
 
+      //load process noise covariance from yaml
       Eigen::Matrix<double, 6, 6> R = loadMatrixFromYaml("settings.yaml", "R"); // Cov linear model
 
+      //predict covariance
       Eigen::Matrix<double, 6, 6> sigmaPred = A * this->sigma * A.transpose() + R;    //predicted covariance
 
+      //observation matrix and measurement noise
       Eigen::Matrix<double, 6, 6> C = loadMatrixFromYaml("settings.yaml", "C");
       //printMatrix(C, "C");
       Eigen::Matrix<double, 6, 6> Q = loadMatrixFromYaml("settings.yaml", "Q");
+      
+      //kalman gain
       Eigen::Matrix<double, 6, 6> kalmanGain = sigmaPred * C.transpose() * (C * sigmaPred * C.transpose() + Q).inverse();     //calculate Kalman Gain
 
+      //update state and covariance
       Eigen::Matrix<double, 6, 1> muCor = muPred + kalmanGain * (z - C * muPred);       //correct prediction based on Kalman Gain
       Eigen::Matrix<double, 6, 6> sigmaCor = (Eigen::MatrixXd::Identity(6,6) - kalmanGain * C) * sigmaPred;    //correct covariance based on Kalman Gain
     
+      //update class variables
       this->mu = muCor;
       this->sigma = sigmaCor;
 
@@ -228,6 +266,7 @@ class KF:public rclcpp::Node{
       return;
     }
 
+    //convert quaternion to yaw angle
     double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
     {
       tf2::Quaternion tf_q(q.x, q.y, q.z, q.w);
@@ -236,6 +275,30 @@ class KF:public rclcpp::Node{
       return yaw;
     }
 
+    //get robot true pose from TF
+    bool getRobotTruePoseFromTF(geometry_msgs::msg::Pose& robot_pose)
+    {
+      try
+      {
+        geometry_msgs::msg::TransformStamped transform_stamped;
+        transform_stamped = tf_buffer_->lookupTransform(
+          source_frame_, target_frame_, tf2::TimePointZero);
+        
+        //convert transform to pose
+        robot_pose.position.x = transform_stamped.transform.translation.x;
+        robot_pose.position.y = transform_stamped.transform.translation.y;
+        robot_pose.position.z = transform_stamped.transform.translation.z;
+        robot_pose.orientation = transform_stamped.transform.rotation;
+        
+        return true;
+      }
+      catch (tf2::TransformException &ex)
+      {
+        return false;
+      }
+    }
+
+    //debug function to print matrices
     void printMatrix(const Eigen::MatrixXd& matrix, const std::string& name = "Matrix")
     {
       RCLCPP_INFO(this->get_logger(), "%s (%dx%d):", name.c_str(), 
@@ -249,10 +312,10 @@ class KF:public rclcpp::Node{
           row_str += std::to_string(matrix(i, j));
           if (j < matrix.cols() - 1) row_str += ", ";
         }
-        RCLCPP_INFO(this->get_logger(), "  [%s]", row_str.c_str());
-      }
-    }
+        RCLCPP_INFO(this->get_logger(), "  [%s]", row_str.c_str());    }
+  }
 
+  //load matrix from yaml configuration file
   Eigen::MatrixXd loadMatrixFromYaml(const std::string & yaml_file, const std::string & matrix_name)
   {
     try

@@ -19,13 +19,13 @@
 
 class EKF:public rclcpp::Node{
   public:
-    double interval = 0.2; //s
-
+    double interval = 0.2; //filter update rate
 
     EKF():Node("extended_kalman_node"){
-      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0;
-      sigma = Eigen::Matrix<double, 6, 6>::Identity();
+      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0; //initial state
+      sigma = Eigen::Matrix<double, 6, 6>::Identity(); //initial covariance
 
+      //subscribe to sensor data
       odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
         "/odom", 
         10,
@@ -45,6 +45,7 @@ class EKF:public rclcpp::Node{
         std::chrono::duration<double>(interval),
         std::bind(&EKF::timerCallback, this));
 
+      //publishers
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/ekf_pose", 10);
       path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/ekf_path", 10);
       path_msg_.header.frame_id = "map";
@@ -81,6 +82,7 @@ class EKF:public rclcpp::Node{
 
     void timerCallback()
     {
+      //check if all sensor data is available
       if (!latestOdom || !latestCmd_vel || !latestImu)
       {
         std::string waiting_msg = "Waiting for data from:";
@@ -92,9 +94,10 @@ class EKF:public rclcpp::Node{
         return;
       }
 
-
+      //run extended kalman filter
       calculateKalman();
 
+      //prepare pose message
       geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
       pose_msg.header.stamp = this->now();
       pose_msg.header.frame_id = "map";
@@ -110,6 +113,7 @@ class EKF:public rclcpp::Node{
       pose_msg.pose.pose.orientation.z = q.z();
       pose_msg.pose.pose.orientation.w = q.w();
 
+      //set covariance matrix
       for (int i = 0; i < 6; ++i)
       {
         for (int j = 0; j < 6; ++j)
@@ -118,6 +122,7 @@ class EKF:public rclcpp::Node{
         }
       }
 
+      //create path pose
       geometry_msgs::msg::PoseStamped path_pose;
       path_pose.header = pose_msg.header;
       path_pose.pose = pose_msg.pose.pose; 
@@ -142,14 +147,15 @@ class EKF:public rclcpp::Node{
     //   Eigen::Matrix<double, 6, 1> mu;
     //   Eigen::Matrix<double, 6, 6> sigma;
     // };
-    Eigen::Matrix<double, 6, 1> mu;
-    Eigen::Matrix<double, 6, 6> sigma;
+    Eigen::Matrix<double, 6, 1> mu; //state vector
+    Eigen::Matrix<double, 6, 6> sigma; //covariance matrix
 
     void calculateKalman()
     {
-      Eigen::Matrix<double, 2, 1> u;
-      Eigen::Matrix<double, 6, 1> z;
+      Eigen::Matrix<double, 2, 1> u; //control input
+      Eigen::Matrix<double, 6, 1> z; //measurement vector
 
+      //current state
       double x = this->mu(0);
       double y = this->mu(1);
       double theta = this->mu(2);
@@ -157,9 +163,11 @@ class EKF:public rclcpp::Node{
       double y_vel = this->mu(4);
       double omega = this->mu(5);
 
+      //control input from cmd_vel
       u(0) = latestCmd_vel->twist.linear.x;
       u(1) = latestCmd_vel->twist.angular.z;
 
+      //extract yaw from IMU quaternion
       tf2::Quaternion qImu(
         latestImu->orientation.x,
         latestImu->orientation.y,
@@ -169,6 +177,7 @@ class EKF:public rclcpp::Node{
       double roll, pitch, thetaImu;
       tf2::Matrix3x3(qImu).getRPY(roll, pitch, thetaImu);
 
+      //construct measurement vector
       z(0) = x + (latestOdom->twist.twist.linear.x * cos(thetaImu) * interval);
       z(1) = y + (latestOdom->twist.twist.linear.x * sin(thetaImu) * interval);
       z(2) = thetaImu;
@@ -178,10 +187,11 @@ class EKF:public rclcpp::Node{
 
       //RCLCPP_INFO(this->get_logger(), "Estimated Pose according to cmd_vel pred -> x: %.3f, y: %.3f, theta: %.3f", z(0), z(1), z(2));
 
+      //avoid division by zero
       if(omega == 0){
         omega = 0.0001;
       }
-                          // ### simpler but more effective ###
+                          //### simpler but more effective ###
       // Eigen::Matrix<double, 6, 1> f;
       // f(0) = x + u(0) * interval * cos(theta);
       // f(1) = y + u(0) * interval * sin(theta);
@@ -190,7 +200,7 @@ class EKF:public rclcpp::Node{
       // f(4) = sin(theta) * u(0);
       // f(5) = omega + u(1);
 
-      // //calculated jacobian by hand
+      //calculated jacobian by hand
       // Eigen::Matrix<double, 6, 6> F = Eigen::MatrixXd::Identity(6,6);
       // F(0, 3) = interval;
       // F(1, 4) = interval;
@@ -198,7 +208,7 @@ class EKF:public rclcpp::Node{
       // F(3, 2) = -u(0) * sin(theta);
       // F(4, 2) = u(0) * cos(theta); 
 
-
+      //nonlinear motion model
       Eigen::Matrix<double, 6, 1> f;
       f(0) = -(x_vel/omega) * sin(theta) + (x_vel/omega) * sin(theta + omega * interval);
       f(1) = (x_vel/omega) * cos(theta) - (x_vel/omega) * cos(theta + omega * interval);
@@ -207,9 +217,10 @@ class EKF:public rclcpp::Node{
       f(4) = sin(theta) * u(0);
       f(5) = omega + u(1);
 
-      //calculated jacobian by hand
+      //jacobian matrix for nonlinear motion model
       Eigen::Matrix<double, 6, 6> F = Eigen::Matrix<double, 6, 6>::Identity();
 
+      //precompute trigonometric values
       double sin_theta = sin(theta);
       double cos_theta = cos(theta);
       double sin_theta_omega_dt = sin(theta + omega * interval);
@@ -217,6 +228,8 @@ class EKF:public rclcpp::Node{
 
       double xvel_over_omega = x_vel / omega;
       double omega_sq = omega * omega;
+      
+      //fill jacobian matrix
       F(0, 2) = -xvel_over_omega * cos_theta + xvel_over_omega * cos_theta_omega_dt;
       F(0, 3) = -sin_theta / omega + sin_theta_omega_dt / omega;
       F(0, 5) = (x_vel / omega_sq) * sin_theta - (x_vel / omega_sq) * sin_theta_omega_dt + (xvel_over_omega) * interval * cos_theta_omega_dt;
@@ -233,20 +246,30 @@ class EKF:public rclcpp::Node{
 
       F(5, 5) = 1.0;
 
+      //predict state
       Eigen::Matrix<double, 6, 1> muPred = mu + f;    //apply motion model
 
+      //load process noise covariance from yaml
       Eigen::Matrix<double, 6, 6> R = loadMatrixFromYaml("settings.yaml", "R"); // Cov linear model
 
+      //predict covariance
       Eigen::Matrix<double, 6, 6> sigmaPred = F * this->sigma * F.transpose() + R;    //predicted covariance
 
+      //observation model (identity since mu and z have same composition)
       Eigen::Matrix<double, 6, 1> h = muPred;       //since mu and z have the same composition no transformation is needed
       Eigen::Matrix<double, 6, 6> H = Eigen::MatrixXd::Identity(6,6);   //Identity since mu and z have the same composition
+      
+      //load measurement noise covariance from yaml
       Eigen::Matrix<double, 6, 6> Q = loadMatrixFromYaml("settings.yaml", "Q");
+      
+      //kalman gain
       Eigen::Matrix<double, 6, 6> kalmanGain = sigmaPred * H.transpose() * (H * sigmaPred * H.transpose() + Q).inverse();     //calculate Kalman Gain
 
+      //update state and covariance
       Eigen::Matrix<double, 6, 1> muCor = muPred + kalmanGain * (z - h);       //correct prediction based on Kalman Gain
       Eigen::Matrix<double, 6, 6> sigmaCor = (Eigen::MatrixXd::Identity(6,6) - kalmanGain * H) * sigmaPred;    //correct covariance based on Kalman Gain
     
+      //update class variables
       this->mu = muCor;
       this->sigma = sigmaCor;
 
@@ -255,6 +278,7 @@ class EKF:public rclcpp::Node{
       return;
     }
 
+    //convert quaternion to yaw angle
     double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
     {
       tf2::Quaternion tf_q(q.x, q.y, q.z, q.w);
@@ -263,6 +287,7 @@ class EKF:public rclcpp::Node{
       return yaw;
     }
 
+    //debug function to print matrices
     void printMatrix(const Eigen::MatrixXd& matrix, const std::string& name = "Matrix")
     {
       RCLCPP_INFO(this->get_logger(), "%s (%dx%d):", name.c_str(), 
@@ -279,6 +304,8 @@ class EKF:public rclcpp::Node{
         RCLCPP_INFO(this->get_logger(), "  [%s]", row_str.c_str());
       }
     }
+  
+  //load matrix from yaml configuration file
   Eigen::MatrixXd loadMatrixFromYaml(const std::string & yaml_file, const std::string & matrix_name)
   {
     try

@@ -30,23 +30,24 @@ class PF:public rclcpp::Node{
         double x;
         double y;
         double theta;
-        double weight = 1.0;  // Initialize with equal weights
+        double weight = 1.0;  //initialize with equal weights
     };
 
     Eigen::Matrix<double, 6, 1> mu;
     Eigen::Matrix<double, 6, 6> sigma;
-    double interval = 0.2;
+    double interval = 0.1; //filter update rate
     std::vector<Particle> particles;
-    const int amount_particles = 1000;
+    const int amount_particles = 300; //number of particles
     nav_msgs::msg::Path path_msg_;
 
 
 
     PF():Node("particle_filter_node"){
 
-      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0;
-      sigma = Eigen::Matrix<double, 6, 6>::Identity();
+      mu << -2.0, -0.5, 0.0, 0.0, 0.0, 0.0; //initial state
+      sigma = Eigen::Matrix<double, 6, 6>::Identity(); //initial covariance
 
+      //subscribe to sensor data
       odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
         "/odom", 
         10,
@@ -70,12 +71,13 @@ class PF:public rclcpp::Node{
       scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
         "/scan",
         10,
-        std::bind(&PF::scanCallback, this, std::placeholders::_1));  // Add this
+        std::bind(&PF::scanCallback, this, std::placeholders::_1));  //laser scan subscription
 
       timer_ = this->create_wall_timer(
         std::chrono::duration<double>(interval),  // 0.02 seconds = 20ms
         std::bind(&PF::timerCallback, this));
 
+      //publishers
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/pf_pose", 10);
       particles_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/pf_particles", 10);
       path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/pf_path", 10);
@@ -120,7 +122,7 @@ class PF:public rclcpp::Node{
     {
       latestMap = std::make_unique<nav_msgs::msg::OccupancyGrid>(*msg);
         
-      // Initialize particles when we first receive the map
+      //initialize particles when we first receive the map
       if (particles.empty()) {
           particles = initialize_particles(amount_particles, *latestMap);
           RCLCPP_INFO(this->get_logger(), "Initialized %zu particles", particles.size());
@@ -134,6 +136,7 @@ class PF:public rclcpp::Node{
 
     void timerCallback()
     {
+        //check if required sensor data is available
         if (!latestCmd_vel || !latestScan)
         {
             std::string waiting_msg = "Waiting for data from:";
@@ -144,14 +147,15 @@ class PF:public rclcpp::Node{
             return;
         }
 
+        //prepare control input
         Eigen::Matrix<double, 2, 1> u;
         u(0) = latestCmd_vel->twist.linear.x;
         u(1) = latestCmd_vel->twist.angular.z;
 
-        // Prediction step
+        //prediction step
         particles = move_particles(particles, u);
         
-        // Update step (only if we have scan and map data)
+        //update step (only if we have scan and map data)
         if (latestScan && latestMap) {
             particles = observe_particles(particles, latestScan, latestMap);
         }
@@ -159,10 +163,11 @@ class PF:public rclcpp::Node{
         publishParticles();
     }
 
+//initialize particles randomly on free cells
 std::vector<Particle> initialize_particles(int n_particles, const nav_msgs::msg::OccupancyGrid& map){
     std::vector<Particle> particles;
 
-    // Precompute free cells
+    //precompute free cells
     std::vector<std::pair<int, int>> free_cells;
     int width = map.info.width;
     int height = map.info.height;
@@ -170,7 +175,7 @@ std::vector<Particle> initialize_particles(int n_particles, const nav_msgs::msg:
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             int index = x + y * width;
-            if (map.data[index] == 0) { // Free cell
+            if (map.data[index] == 0) { //free cell
                 free_cells.emplace_back(x, y);
             }
         }
@@ -180,7 +185,7 @@ std::vector<Particle> initialize_particles(int n_particles, const nav_msgs::msg:
         throw std::runtime_error("Map has no free cells!");
     }
 
-    // Random generators
+    //random generators
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> cell_dist(0, free_cells.size() - 1);
@@ -189,7 +194,7 @@ std::vector<Particle> initialize_particles(int n_particles, const nav_msgs::msg:
     for (int i = 0; i < n_particles; ++i) {
         auto [cell_x, cell_y] = free_cells[cell_dist(gen)];
 
-        // Convert cell to world coordinates
+        //convert cell to world coordinates
         double world_x = map.info.origin.position.x + (cell_x + 0.5) * map.info.resolution;
         double world_y = map.info.origin.position.y + (cell_y + 0.5) * map.info.resolution;
 
@@ -201,40 +206,41 @@ std::vector<Particle> initialize_particles(int n_particles, const nav_msgs::msg:
     return particles;
 }
 
+//apply motion model with noise to particles
 std::vector<Particle> move_particles(std::vector<Particle> particles, Eigen::Matrix<double, 2, 1> u){
-  // Add noise to prevent particle degeneracy
+  //add noise to prevent particle degeneracy
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::normal_distribution<> pos_noise(0.0, 0.01);  // 1cm position noise
-  std::normal_distribution<> angle_noise(0.0, 0.02); // ~1 degree angle noise
+  std::normal_distribution<> pos_noise(0.0, 0.01);  //1cm position noise
+  std::normal_distribution<> angle_noise(0.0, 0.02); //~1 degree angle noise
   
   for(auto& particle : particles){
-    // Apply motion model with noise
+    //apply motion model with noise
     particle.x += u(0) * interval * cos(particle.theta) + pos_noise(gen);
     particle.y += u(0) * interval * sin(particle.theta) + pos_noise(gen);
     particle.theta += u(1) * interval + angle_noise(gen);
     
-    // Normalize angle to [-pi, pi]
+    //normalize angle to [-pi, pi]
     while (particle.theta > M_PI) particle.theta -= 2 * M_PI;
     while (particle.theta < -M_PI) particle.theta += 2 * M_PI;
   }
   return particles;
 }
 
+//calculate likelihood of particle given laser scan
 double calculate_likelihood(const Particle &particle, const std::unique_ptr<sensor_msgs::msg::LaserScan>& scan, const std::unique_ptr<nav_msgs::msg::OccupancyGrid>& map){
   double x = particle.x;
   double y = particle.y;
   double theta = particle.theta;
 
   double log_likelihood = 0.0;
-  double sigma = 0.3;  // Increase sigma to be more forgiving
+  double sigma = 0.3;  //increase sigma to be more forgiving
 
-  // Only use every 20th ray to avoid underflow and reduce computation
-  int step = 20;
+  int step = 20; //process every 20th ray for performance
   int valid_rays = 0;
   
   for (size_t i = 0; i < scan->ranges.size(); i += step){
-    // Skip invalid ranges
+    //skip invalid ranges
     if (scan->ranges[i] < scan->range_min || scan->ranges[i] > scan->range_max) {
       continue;
     }
@@ -247,25 +253,26 @@ double calculate_likelihood(const Particle &particle, const std::unique_ptr<sens
 
     double diff = observed_range - expected_range;
     
-    // Gaussian likelihood model
+    //gaussian likelihood model
     log_likelihood += -(diff * diff) / (2 * sigma * sigma);
     valid_rays++;
   }
   
-  // Normalize by number of valid rays
+  //normalize by number of valid rays
   if (valid_rays > 0) {
     log_likelihood /= valid_rays;
   }
   
-  // Add offset to prevent complete underflow
+  //add offset to prevent complete underflow
   log_likelihood += 5.0;
   
   return exp(log_likelihood);
 }
 
+//raycast from particle position to find expected range
 double raycast_on_map(double x, double y, double global_angle, const std::unique_ptr<nav_msgs::msg::OccupancyGrid>& map)
 {
-    double max_range = 10.0;
+    double max_range = 20.0;
     double step_size = 0.02; //m
     double distance = 0.0;
 
@@ -274,7 +281,7 @@ double raycast_on_map(double x, double y, double global_angle, const std::unique
         double ray_x = x + distance * cos(global_angle);
         double ray_y = y + distance * sin(global_angle);
 
-        //world cord to map ind
+        //world coordinates to map indices
         int map_x = static_cast<int>((ray_x - map->info.origin.position.x) / map->info.resolution);
         int map_y = static_cast<int>((ray_y - map->info.origin.position.y) / map->info.resolution);
 
@@ -285,7 +292,7 @@ double raycast_on_map(double x, double y, double global_angle, const std::unique
 
         int index = map_y * map->info.width + map_x;
 
-        if (map->data[index] > 50) //wall threshhold
+        if (map->data[index] > 50) //wall threshold
         {
             return distance; //if wall is found
         }
@@ -299,10 +306,12 @@ double raycast_on_map(double x, double y, double global_angle, const std::unique
 
 
 
+//update particle weights and resample
 std::vector<Particle> observe_particles(std::vector<Particle> particles, const std::unique_ptr<sensor_msgs::msg::LaserScan>& scan, const std::unique_ptr<nav_msgs::msg::OccupancyGrid>& map)
 {
     if (particles.empty()) return particles;
     
+    //calculate weights for all particles
     double weight_sum = 0.0;
     for(auto& particle : particles){
         particle.weight = calculate_likelihood(particle, scan, map);
@@ -314,10 +323,11 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
         return particles;
     }
     
+    //find best particle
     double highest_weight = 0.0;
     Particle highest_Particle;
 
-    // Normalize weights
+    //normalize weights
     for(auto& particle : particles){
         particle.weight /= weight_sum;
         if(particle.weight > highest_weight){
@@ -326,32 +336,32 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
         }
       }
 
-    // Simple multinomial resampling with noise
+    //simple multinomial resampling with noise
     std::vector<Particle> new_particles;
     std::random_device rd;
     std::mt19937 gen(rd());
     
-    // Create discrete distribution based on weights
+    //create discrete distribution based on weights
     std::vector<double> weights;
     for (const auto& p : particles) {
         weights.push_back(p.weight);
     }
     std::discrete_distribution<> weight_dist(weights.begin(), weights.end());
     
-    // Add noise distributions
-    std::normal_distribution<> pos_noise(0.0, 0.05);  // 5cm position noise
-    std::normal_distribution<> angle_noise(0.0, 0.1); // ~6 degree angle noise
+    //add noise distributions
+    std::normal_distribution<> pos_noise(0.0, 0.05);  //5cm position noise
+    std::normal_distribution<> angle_noise(0.0, 0.1); //~6 degree angle noise
     
     for (size_t i = 0; i < particles.size(); ++i) {
         int index = weight_dist(gen);
         Particle new_particle = particles[index];
         
-        // Add small amount of noise to prevent identical particles
+        //add small amount of noise to prevent identical particles
         new_particle.x += pos_noise(gen);
         new_particle.y += pos_noise(gen);
         new_particle.theta += angle_noise(gen);
         
-        // Normalize angle
+        //normalize angle
         while (new_particle.theta > M_PI) new_particle.theta -= 2 * M_PI;
         while (new_particle.theta < -M_PI) new_particle.theta += 2 * M_PI;
         
@@ -360,6 +370,7 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
 
     RCLCPP_INFO(this->get_logger(), "X: %f, Y: %f", highest_Particle.x, highest_Particle.y);
 
+    //publish best particle pose
     geometry_msgs::msg::PoseStamped pose_msg;
     pose_msg.header.stamp = this->now();
     pose_msg.header.frame_id = "map";  // or "odom", depending on your TF setup
@@ -385,6 +396,7 @@ std::vector<Particle> observe_particles(std::vector<Particle> particles, const s
     return new_particles;
 }
 
+//convert quaternion to yaw angle
 double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
   {
     tf2::Quaternion tf_q(q.x, q.y, q.z, q.w);
@@ -393,6 +405,7 @@ double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
     return yaw;
   }
 
+  //debug function to print matrices
   void printMatrix(const Eigen::MatrixXd& matrix, const std::string& name = "Matrix")
   {
     RCLCPP_INFO(this->get_logger(), "%s (%dx%d):", name.c_str(), 
@@ -410,6 +423,7 @@ double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
     }
   }
 
+  //load matrix from yaml configuration file
   Eigen::MatrixXd loadMatrixFromYaml(const std::string & yaml_file, const std::string & matrix_name)
   {
     try
@@ -443,6 +457,7 @@ double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
     }
   }
 
+  //publish all particles for visualization
   void publishParticles()
   {
     if (particles.empty()) return;
@@ -457,7 +472,7 @@ double quaternionToYaw(const geometry_msgs::msg::Quaternion &q)
         pose.position.y = particle.y;
         pose.position.z = 0.0;
         
-        // Convert theta to quaternion
+        //convert theta to quaternion
         tf2::Quaternion q;
         q.setRPY(0, 0, particle.theta);
         pose.orientation.x = q.x();
